@@ -1,0 +1,10 @@
+[Unit]
+Description=Go worker Daemon
+
+[Service]
+ExecStart=/home/n7student/compute_balancer/worker/worker_test
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+

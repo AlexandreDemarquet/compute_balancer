@@ -1,0 +1,10 @@
+[Unit]
+Description=Go Master Daemon
+
+[Service]
+ExecStart=/home/n7student/compute_balancer/master/master_test
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
