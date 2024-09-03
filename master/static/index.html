@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Worker Status</title>
+</head>
+<body>
+    <h1>Workers Information</h1>
+    <div id="worker-status"></div>
+
+    <script>
+        function fetchWorkerInfo() {
+            fetch("/workers")
+                .then(response => response.json())
+                .then(data => {
+                    let workerDiv = document.getElementById("worker-status");
+                    workerDiv.innerHTML = JSON.stringify(data, null, 2);
+                })
+                .catch(error => console.error('Error fetching worker info:', error));
+        }
+
+        setInterval(fetchWorkerInfo, 5000);  // Rafraîchir les données toutes les 5 secondes
+    </script>
+</body>
+</html>
+
