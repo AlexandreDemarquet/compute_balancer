@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Nom des services systemd à gérer
-SERVICES=("master_test" "worker_test")
+SERVICES=("worker_test" "master_test")
 
 # Parcourir chaque service
 for SERVICE in "${SERVICES[@]}"; do
