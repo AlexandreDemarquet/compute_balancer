@@ -137,7 +137,7 @@ func reportStatus(conn net.Conn) {
 	memoryUsage := getMemoryUsage()
 	nomMachine, err := os.Hostname()
 	now := time.Now()
-	myAddr := "666.666.666.666" //recupérer son adresse ip
+	myAddr := "localhost" //recupérer son adresse ip
 	// Création de l'objet avec les informations du worker
 	workerStatus := WorkerInfo{
 		Address:        myAddr,

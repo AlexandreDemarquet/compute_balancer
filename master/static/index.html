@@ -42,6 +42,12 @@
                     addressCell.textContent = address;
                     row.appendChild(addressCell);
 
+                    // Nom de la machine
+                    let machineName = document.createElement("td");
+                    machineName.textContent = info.nom_machine;
+                    row.appendChild(machineName);
+
+
                     // CPU Usage (show usage of each core)
                     let cpuCell = document.createElement("td");
                     const cpuDetails = Object.entries(info.cpu_usage).map(([core, usage]) => `${core}: ${usage.toFixed(2)}%`).join("<br>");
@@ -70,9 +76,10 @@
     <table>
         <thead>
             <tr>
-                <th>Worker Address</th>
-                <th>CPU Usage (per core)</th>
-                <th>Memory Usage</th>
+                <th>IP worker</th>
+                <th>Nom worker</th>
+                <th>CPU Usage (par coeur)</th>
+                <th>RAM</th>
             </tr>
         </thead>
         <tbody id="worker-table-body">

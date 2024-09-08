@@ -75,7 +75,22 @@ func sendCommandToWorker(workerAddr string, cmd Command) error {
 	return nil
 }
 
-func firstConnectionToWorker(workersAddr []string) error {
+func findMissing(list1, list2 []string) (missing []string) {
+	set := make(map[string]struct{}, len(list2))
+	for _, v := range list2 {
+		set[v] = struct{}{}
+	}
+	for _, v := range list1 {
+		if _, found := set[v]; !found {
+			missing = append(missing, v)
+		}
+	}
+	return
+}
+
+func recupInfosWorkers(workersAddr []string) []string {
+	var nouvIpDispos []string
+	// On boucle sur les adresses ip disponibles et on met à jour leurs états et on signale si un des workers est dead
 	for i := 0; i < len(workersAddr); i++ {
 		workerAddr := workersAddr[i]
 		conn, err := net.Dial("tcp", workerAddr+":8080")
@@ -87,25 +102,66 @@ func firstConnectionToWorker(workersAddr []string) error {
 
 		cmd_first_connection := Command{
 			Command: "infos",
-			Args:    []string{"cpu_usage", "memory_usage", "nom_worker", "date", "disponible"},
+			Args:    []string{"cpu_usage", "memory_usage", "nom_worker", "date", "disponible"}, //argument se sert actuellement a rien
 		}
 
 		encoder := json.NewEncoder(conn)
 		if err := encoder.Encode(cmd_first_connection); err != nil {
 			fmt.Println("Envoie commande de première connection impossible au worker: ", workerAddr, "avec erreur: ", err)
+			continue
 		}
 
-		// Lire les réponses du worker jusqu'à la fermeture de la connexion
-		reader := bufio.NewReader(conn)
-		for {
-			status, err := reader.ReadString('\n')
-			if err != nil {
-				break // Sortir de la boucle si la connexion est fermée
-			}
-			fmt.Println("Worker Status:", status)
+		decoder := json.NewDecoder(conn)
+		var info WorkerInfo
+		if err := decoder.Decode(&info); err != nil {
+			fmt.Println("Erreur décodage infos du worker:", err)
+			continue
 		}
+		nouvIpDispos = append(nouvIpDispos, info.Address)
+		updateWorkerInfo(workerAddr, info)
 	}
-	return nil
+	missing := findMissing(nouvIpDispos, workersAddr)
+	if len(missing) != 0 {
+		fmt.Println("Perte de contact avec: ", missing)
+	}
+	return nouvIpDispos
+}
+
+func firstConnectionToWorker(workersAddr []string, IPdispos []string) []string {
+	// On boucle sur les adresses ip présentent dans le yaml et on renvoie les adresses ip des workers disponibles.
+	for i := 0; i < len(workersAddr); i++ {
+		workerAddr := workersAddr[i]
+		conn, err := net.Dial("tcp", workerAddr+":8080")
+		if err != nil {
+			fmt.Println("Connection impossible au worker: ", workerAddr)
+			continue
+		}
+		defer conn.Close()
+
+		cmd_first_connection := Command{
+			Command: "infos",
+			Args:    []string{"cpu_usage", "memory_usage", "nom_worker", "date", "disponible"}, //argument se sert actuellement a rien
+		}
+
+		encoder := json.NewEncoder(conn)
+		if err := encoder.Encode(cmd_first_connection); err != nil {
+			fmt.Println("Envoie commande de première connection impossible au worker: ", workerAddr, "avec erreur: ", err)
+			continue
+		}
+
+		decoder := json.NewDecoder(conn)
+		var info WorkerInfo
+		if err := decoder.Decode(&info); err != nil {
+			fmt.Println("error decoding worker status:", err)
+			continue
+		}
+		IPdispos = append(IPdispos, info.Address)
+		fmt.Println("Worker disponible:", info.Address)
+		updateWorkerInfo(workerAddr, info)
+
+	}
+
+	return IPdispos
 }
 
 func handleClientConnection(conn net.Conn, workerAddr string) {
@@ -190,39 +246,42 @@ func main() {
 	if err != nil {
 		fmt.Println("Erreur dans le décodage du .yaml:", err)
 	}
-	// pour chaque worker renseigné on essaye de se connecter à lui et de récupérer ses informations
-	firstConnectionToWorker(config.WorkersIP)
 
-	listenAddr := ":8081"
-	workerAddr := "localhost:8080"
+	var WorkersDispos []string
+	// pour chaque worker renseigné on essaye de se connecter à lui et de récupérer ses informations
+	WorkersDispos = firstConnectionToWorker(config.WorkersIP, WorkersDispos)
+
+	//listenAddr := ":8081"
+	//workerAddr := "localhost:8080"
 
 	// Écoute sur le port 8081 pour lui envoyer l'argument de la commande (ça sera le nom de fichier .las que le serveur web lui enverra)
-	ln, err := net.Listen("tcp", listenAddr)
-	if err != nil {
-		fmt.Println("Error starting TCP server on port 8081:", err)
-		os.Exit(1)
-	}
-	defer ln.Close()
+	//ln, err := net.Listen("tcp", listenAddr)
+	//if err != nil {
+	//	fmt.Println("Error starting TCP server on port 8081:", err)
+	//	os.Exit(1)
+	//}
+	//defer ln.Close()
 
 	go startHTTPServer() // Démarrer le serveur HTTP dans une goroutine
 
-	fmt.Println("Master listening on", listenAddr)
+	//fmt.Println("Master listening on", listenAddr)
 
 	// Boucle d'acceptation des connexions
 	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			fmt.Println("Error accepting connection:", err)
-			continue
-		}
+		WorkersDispos = recupInfosWorkers(WorkersDispos)
+		//conn, err := ln.Accept()
+		//if err != nil {
+		//	fmt.Println("Error accepting connection:", err)
+		//	continue
+		//}
 
 		// Gérer la connexion client dans une goroutine séparée
-		go handleClientConnection(conn, workerAddr)
+		//go handleClientConnection(conn, workerAddr)
 
 		// Après avoir traité la commande, récupérer l'état du worker
-		err = receiveWorkerStatus(workerAddr)
-		if err != nil {
-			fmt.Printf("Error receiving worker status: %v\n", err)
-		}
+		//err = receiveWorkerStatus(workerAddr)
+		//if err != nil {
+		//	fmt.Printf("Error receiving worker status: %v\n", err)
+		//}
 	}
 }

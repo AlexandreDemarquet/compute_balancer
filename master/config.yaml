@@ -1,5 +1,5 @@
 workers_ip:
   - localhost
-  - localhost
+  - 127.0.0.1
 
 
