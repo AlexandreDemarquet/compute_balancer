@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -232,6 +233,18 @@ func startHTTPServer() {
 	http.ListenAndServe(":8082", nil)
 }
 
+func lireFichiers(dossier string) (map[string]os.FileInfo, error) {
+	fichiers := make(map[string]os.FileInfo)
+	listeFichiers, err := ioutil.ReadDir(dossier)
+	if err != nil {
+		return nil, err
+	}
+	for _, fichier := range listeFichiers {
+		fichiers[fichier.Name()] = fichier
+	}
+	return fichiers, nil
+}
+
 func main() {
 
 	// Lecture de la config
@@ -266,9 +279,34 @@ func main() {
 
 	//fmt.Println("Master listening on", listenAddr)
 
-	// Boucle d'acceptation des connexions
+	dossier := "/home/n7student/compute_balancer/data"
+	fichiersPrecedents, err := lireFichiers(dossier)
+	if err != nil {
+		fmt.Println("Erreur de lecture du dossier:", err)
+	}
 	for {
 		WorkersDispos = recupInfosWorkers(WorkersDispos)
+
+		fichiersActuels, err := lireFichiers(dossier)
+		if err != nil {
+			fmt.Println("Erreur de lecture du dossier:", err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		// Chercher les nouveaux fichiers en comparant avec les précédents
+		for fichier := range fichiersActuels {
+			if _, existaitDeja := fichiersPrecedents[fichier]; !existaitDeja {
+				fmt.Printf("Nouveau fichier détecté: %s\n", fichier)
+			}
+		}
+
+		// Mettre à jour l'état précédent avec l'état actuel
+		fichiersPrecedents = fichiersActuels
+
+		// Pause avant la prochaine vérification (ex : 2 secondes)
+		time.Sleep(2 * time.Second)
+
 		//conn, err := ln.Accept()
 		//if err != nil {
 		//	fmt.Println("Error accepting connection:", err)
