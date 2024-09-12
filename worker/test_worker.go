@@ -33,46 +33,49 @@ func reportProgress(conn net.Conn, progress string) error {
 	return err
 }
 
+func handleRunPython(conn net.Conn, cmd_python Command) {
+	if len(cmd_python.Args) < 2 {
+		reportProgress(conn, "Erreur: nombre d'arguments insuffisant")
+		return
+	}
+	// Exécution du script Python
+	script := cmd_python.Args[0]
+	arg := cmd_python.Args[1]
+
+	cmd := exec.Command("python3", script, arg)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		reportProgress(conn, fmt.Sprintf("Erreur1: %v", err))
+		return
+	}
+	scanner := bufio.NewScanner(stdout)
+	if err := cmd.Start(); err != nil {
+		reportProgress(conn, fmt.Sprintf("Erreur2: %v", err))
+		return
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		reportProgress(conn, fmt.Sprintf("Output: %s", line))
+	}
+	if scanner.Err() != nil {
+		cmd.Process.Kill()
+		cmd.Wait()
+		reportProgress(conn, fmt.Sprintf("Erreur_scann: %v", scanner.Err()))
+	}
+	if err := cmd.Wait(); err != nil {
+		reportProgress(conn, fmt.Sprintf("Erreur3: %v", err))
+		return
+	}
+
+	reportProgress(conn, "T'as réussi bg le script s'est exécuté!")
+}
+
 // handleCommand gère les différentes commandes reçues
 func handleCommand(conn net.Conn, cmd Command) {
 	switch cmd.Command {
 	case "run_python":
-		if len(cmd.Args) < 2 {
-			reportProgress(conn, "Erreur: nombre d'arguments insuffisant")
-			return
-		}
-		// Exécution du script Python
-		script := cmd.Args[0]
-		arg := cmd.Args[1]
-
-		cmd := exec.Command("python3", script, arg)
-		stdout, err := cmd.StdoutPipe()
-		if err != nil {
-			reportProgress(conn, fmt.Sprintf("Erreur1: %v", err))
-			return
-		}
-		scanner := bufio.NewScanner(stdout)
-		if err := cmd.Start(); err != nil {
-			reportProgress(conn, fmt.Sprintf("Erreur2: %v", err))
-			return
-		}
-
-		for scanner.Scan() {
-			line := scanner.Text()
-			reportProgress(conn, fmt.Sprintf("Output: %s", line))
-		}
-		if scanner.Err() != nil {
-			cmd.Process.Kill()
-			cmd.Wait()
-			reportProgress(conn, fmt.Sprintf("Erreur_scann: %v", scanner.Err()))
-		}
-		if err := cmd.Wait(); err != nil {
-			reportProgress(conn, fmt.Sprintf("Erreur3: %v", err))
-			return
-		}
-
-		reportProgress(conn, "T'as réussi bg le script s'est exécuté!")
-
+		handleRunPython(conn, cmd)
 	case "infos":
 		reportStatus(conn)
 	default:
@@ -311,6 +314,7 @@ func main() {
 				reportProgress(conn, "Erreur dans le décodage de la commande")
 				return
 			}
+			fmt.Println("Commande reçu du master : ", cmd.Command)
 			handleCommand(conn, cmd)
 			//reportStatus(conn, workerAddr) // Envoi de l'état du worker après l'exécution de la commande
 		}(conn)

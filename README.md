@@ -15,3 +15,5 @@ A faire :
 - gérer l'avancement du calcul
 - envoie commande worker
 - paralléliser avec des go routines la récupération des infos workers
+- rendre les chemins universels
+- faire une belle interface html

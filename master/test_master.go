@@ -54,7 +54,7 @@ var (
 func sendCommandToWorker(workerAddr string, cmd Command) error {
 	conn, err := net.Dial("tcp", workerAddr)
 	if err != nil {
-		return fmt.Errorf("error connecting to worker: %v", err)
+		return fmt.Errorf("erreur de connection au worker pour envoie commande: %v", err)
 	}
 	defer conn.Close()
 
@@ -72,7 +72,6 @@ func sendCommandToWorker(workerAddr string, cmd Command) error {
 		}
 		fmt.Println("Worker Status:", status)
 	}
-
 	return nil
 }
 
@@ -189,6 +188,20 @@ func handleClientConnection(conn net.Conn, workerAddr string) {
 	}
 }
 
+func envoiCommandePython(workerAddr string, arg string) {
+	cmd := Command{
+		Command: "run_python",
+		Args:    []string{"/home/n7student/compute_balancer/worker/test_scrypt.py", arg}, //le chemin du scrypt python ne sera pas à donner
+	}
+
+	err := sendCommandToWorker(workerAddr, cmd)
+	if err != nil {
+		fmt.Println("erreur envoie commande au worker ", workerAddr, ": ", err)
+	} else {
+		fmt.Println("Commande envoyée avec l'argument:", arg)
+	}
+}
+
 func updateWorkerInfo(workerAddr string, info WorkerInfo) {
 	mutex.Lock()
 	defer mutex.Unlock()
@@ -298,6 +311,9 @@ func main() {
 		for fichier := range fichiersActuels {
 			if _, existaitDeja := fichiersPrecedents[fichier]; !existaitDeja {
 				fmt.Printf("Nouveau fichier détecté: %s\n", fichier)
+				// ICI faut faire le choix du worker auquel on envoie les boulot.......
+				fmt.Println("Worker choisi pour le boulot: ", "localhost pour le test")
+				go envoiCommandePython("localhost:8080", fichier) // utilisation d'un go routine pour envoyer la commande python
 			}
 		}
 
