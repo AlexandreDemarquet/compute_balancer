@@ -1,3 +1,3 @@
-go build -o ./worker/worker_test ./worker/test_worker.go
+sudo /usr/local/go/bin/go build -o /usr/local/bin/worker_test ./worker/cmd/test_worker.go
 cd ./master
-go build -o ./master_test ./test_master.go
+sudo /usr/local/go/bin/go build -o /usr/local/bin/master_test ./cmd/test_master.go

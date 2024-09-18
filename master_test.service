@@ -2,7 +2,7 @@
 Description=Go Master Daemon
 
 [Service]
-ExecStart=/home/n7student/compute_balancer/master/master_test
+ExecStart=/usr/local/bin/master_test
 Restart=always
 
 [Install]
