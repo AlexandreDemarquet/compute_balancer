@@ -3,6 +3,7 @@ Description=Go worker Daemon
 
 [Service]
 ExecStart=/usr/local/bin/worker_test
+Environment="WORKER_HOME=/votre/chemin/installation/compute_balancer/worker"
 Restart=always
 
 [Install]

@@ -27,6 +27,18 @@ type WorkerInfo struct {
 	DateConnection string             `json:"date_connection"`
 }
 
+var workerHome string
+
+func init() {
+	// Initialisation de la variable globale MASTER_HOME
+	workerHome = os.Getenv("WORKER_HOME")
+	if workerHome == "" {
+		fmt.Println("WORKER_HOME non défini!!")
+	} else {
+		fmt.Println("WORKER_HOME défini :", workerHome)
+	}
+}
+
 // reportProgress envoie la progression au client
 func reportProgress(conn net.Conn, progress string) error {
 	_, err := conn.Write([]byte(progress + "\n"))
@@ -34,13 +46,14 @@ func reportProgress(conn net.Conn, progress string) error {
 }
 
 func handleRunPython(conn net.Conn, cmd_python Command) {
-	if len(cmd_python.Args) < 2 {
+	if len(cmd_python.Args) < 1 {
 		reportProgress(conn, "Erreur: nombre d'arguments insuffisant")
 		return
 	}
 	// Exécution du script Python
-	script := cmd_python.Args[0]
-	arg := cmd_python.Args[1]
+	//script := cmd_python.Args[0]
+	script := workerHome + "/test/test_scrypt.py"
+	arg := cmd_python.Args[0]
 
 	cmd := exec.Command("python3", script, arg)
 	stdout, err := cmd.StdoutPipe()
@@ -289,7 +302,9 @@ func reportStatus(conn net.Conn) {
 }
 
 func main() {
-	masterAddr := "localhost:8080"
+
+	//workerHome := os.Getenv("WORKER_HOME")
+	masterAddr := "localhost:8080" // a load depuis yaml
 
 	ln, err := net.Listen("tcp", masterAddr)
 	if err != nil {

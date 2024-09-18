@@ -51,6 +51,18 @@ var (
 	mutex       sync.Mutex
 )
 
+var masterHome string
+
+func init() {
+	// Initialisation de la variable globale MASTER_HOME
+	masterHome = os.Getenv("MASTER_HOME")
+	if masterHome == "" {
+		fmt.Println("MASTER_HOME non défini!!")
+	} else {
+		fmt.Println("MASTER_HOME défini :", masterHome)
+	}
+}
+
 func sendCommandToWorker(workerAddr string, cmd Command) error {
 	conn, err := net.Dial("tcp", workerAddr)
 	if err != nil {
@@ -177,7 +189,7 @@ func handleClientConnection(conn net.Conn, workerAddr string) {
 
 	cmd := Command{
 		Command: "run_python",
-		Args:    []string{"/home/n7student/compute_balancer/worker/test/test_scrypt.py", arg},
+		Args:    []string{arg},
 	}
 
 	err = sendCommandToWorker(workerAddr, cmd)
@@ -191,7 +203,7 @@ func handleClientConnection(conn net.Conn, workerAddr string) {
 func envoiCommandePython(workerAddr string, arg string) {
 	cmd := Command{
 		Command: "run_python",
-		Args:    []string{"/home/n7student/compute_balancer/worker/test/test_scrypt.py", arg}, //le chemin du scrypt python ne sera pas à donner
+		Args:    []string{arg}, //le chemin du scrypt python ne sera pas à donner
 	}
 
 	err := sendCommandToWorker(workerAddr, cmd)
@@ -236,7 +248,7 @@ func workerInfoHandler(w http.ResponseWriter, r *http.Request) {
 
 func startHTTPServer() {
 	// Serve static files from the "static" directory
-	fs := http.FileServer(http.Dir("/home/n7student/compute_balancer/master/static"))
+	fs := http.FileServer(http.Dir(masterHome + "/static"))
 	http.Handle("/", fs)
 
 	// Endpoint to get worker information
@@ -259,11 +271,9 @@ func lireFichiers(dossier string) (map[string]os.FileInfo, error) {
 }
 
 func main() {
-
 	// Lecture de la config
 	var config Config
-
-	yamlFile, err := os.ReadFile("/home/n7student/compute_balancer/master/config/config.yaml")
+	yamlFile, err := os.ReadFile(masterHome + "/config/config.yaml")
 	if err != nil {
 		fmt.Println("Erreur dans la lecture du .yaml:", err)
 	}
@@ -292,7 +302,7 @@ func main() {
 
 	//fmt.Println("Master listening on", listenAddr)
 
-	dossier := "/home/n7student/compute_balancer/data"
+	dossier := masterHome + "/data"
 	fichiersPrecedents, err := lireFichiers(dossier)
 	if err != nil {
 		fmt.Println("Erreur de lecture du dossier:", err)

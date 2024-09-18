@@ -3,6 +3,7 @@ Description=Go Master Daemon
 
 [Service]
 ExecStart=/usr/local/bin/master_test
+Environment="MASTER_HOME=/votre/chemin/installation/compute_balancer/master"
 Restart=always
 
 [Install]

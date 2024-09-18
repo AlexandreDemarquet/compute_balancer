@@ -8,10 +8,10 @@ for SERVICE in "${SERVICES[@]}"; do
     # Vérifier si le service est actif
     if systemctl is-active --quiet "$SERVICE"; then
         echo "$SERVICE est déjà en cours d'exécution, redémarrage..."
-        sudo systemctl restart "$SERVICE"
+        sudo -E systemctl restart "$SERVICE"
     else
         echo "$SERVICE n'est pas en cours d'exécution, démarrage..."
-        sudo systemctl start "$SERVICE"
+        sudo -E systemctl start "$SERVICE"
     fi
 
     # Vérifier si le service a démarré avec succès

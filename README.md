@@ -1,9 +1,9 @@
 utiliser ce dépot:
 - modifier fichiers go pour adapter les chemins ?
 - lancer scrypt de buildœ
-- copier coller les fichœier master_test.service et worker_test.service dans /etc/systemd/system/
+- modifier et copier coller les fichœier master_test.service et worker_test.service dans /etc/systemd/system/
+- systemctl daemon-reload
 - lancer scrypt de lancement daemon
-- dans un autre terminal lancer commande "telnet localhost 8081"
 
 
 
@@ -17,3 +17,4 @@ A faire :
 - paralléliser avec des go routines la récupération des infos workers
 - rendre les chemins universels
 - faire une belle interface html
+- modifier architecture projet OK   ( ou mettre les binaires? /usr/local/bin? ou dans la ./master/bin?)
