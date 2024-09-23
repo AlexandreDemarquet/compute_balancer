@@ -204,12 +204,12 @@ func handleClientConnection(conn net.Conn, workerAddr string) {
 	}
 }
 
+// function qui envoie une commande python à workerAddr (ip:port) avec l'argument arg
 func envoiCommandePython(workerAddr string, arg string) {
 	cmd := Command{
 		Command: "run_python",
 		Args:    []string{arg}, //le chemin du scrypt python ne sera pas à donner
 	}
-
 	err := sendCommandToWorker(workerAddr, cmd)
 	if err != nil {
 		fmt.Println("erreur envoie commande au worker ", workerAddr, ": ", err)
