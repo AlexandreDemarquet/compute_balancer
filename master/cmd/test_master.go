@@ -46,12 +46,16 @@ type WorkerInfo struct {
 	DateConnection string             `json:"date_connection"`
 }
 
+type WorkerEnVie struct {
+	EtatWorker           string `json:"etat"`
+	CommandeNonExectutee string `json:"commande_non_executee"`
+}
+
 var (
 	workersInfo = make(map[string]*WorkerInfo)
 	mutex       sync.Mutex
+	masterHome  string
 )
-
-var masterHome string
 
 func init() {
 	// Initialisation de la variable globale MASTER_HOME
@@ -105,7 +109,7 @@ func recupInfosWorkers(workersAddr []string) []string {
 	// On boucle sur les adresses ip disponibles et on met à jour leurs états et on signale si un des workers est dead
 	for i := 0; i < len(workersAddr); i++ {
 		workerAddr := workersAddr[i]
-		conn, err := net.Dial("tcp", workerAddr+":8080")
+		conn, err := net.Dial("tcp", workerAddr)
 		if err != nil {
 			fmt.Println("Connection impossible au worker: ", workerAddr)
 			continue
@@ -129,7 +133,7 @@ func recupInfosWorkers(workersAddr []string) []string {
 			fmt.Println("Erreur décodage infos du worker:", err)
 			continue
 		}
-		nouvIpDispos = append(nouvIpDispos, info.Address)
+		nouvIpDispos = append(nouvIpDispos, workerAddr)
 		updateWorkerInfo(workerAddr, info)
 	}
 	missing := findMissing(nouvIpDispos, workersAddr)
@@ -143,7 +147,8 @@ func firstConnectionToWorker(workersAddr []string, IPdispos []string) []string {
 	// On boucle sur les adresses ip présentent dans le yaml et on renvoie les adresses ip des workers disponibles.
 	for i := 0; i < len(workersAddr); i++ {
 		workerAddr := workersAddr[i]
-		conn, err := net.Dial("tcp", workerAddr+":8080")
+		conn, err := net.Dial("tcp", workerAddr)
+		fmt.Println(workerAddr)
 		if err != nil {
 			fmt.Println("Connection impossible au worker: ", workerAddr)
 			continue
@@ -167,10 +172,9 @@ func firstConnectionToWorker(workersAddr []string, IPdispos []string) []string {
 			fmt.Println("error decoding worker status:", err)
 			continue
 		}
-		IPdispos = append(IPdispos, info.Address)
+		IPdispos = append(IPdispos, workerAddr)
 		fmt.Println("Worker disponible:", info.Address)
 		updateWorkerInfo(workerAddr, info)
-
 	}
 
 	return IPdispos
@@ -270,6 +274,39 @@ func lireFichiers(dossier string) (map[string]os.FileInfo, error) {
 	return fichiers, nil
 }
 
+func testRepriseContact(config_ip []string, worker_actuel []string) {
+	missing := findMissing(config_ip, worker_actuel)
+	for i := 0; i < len(missing); i++ {
+		workerAddr := missing[i]
+		conn, err := net.Dial("tcp", workerAddr)
+		if err != nil {
+			fmt.Println("Tentative de reconnection impossible au worker: ", workerAddr)
+			continue
+		}
+		defer conn.Close()
+
+		cmd_first_connection := Command{
+			Command: "vivantoupas",
+			Args:    []string{"est-ce que t'es vivant"}, //argument se sert actuellement a rien
+		}
+
+		encoder := json.NewEncoder(conn)
+		if err := encoder.Encode(cmd_first_connection); err != nil {
+			fmt.Println("Envoie commande de reconnection impossible au worker: ", workerAddr, "avec erreur: ", err)
+			continue
+		}
+
+		decoder := json.NewDecoder(conn)
+		var retour WorkerEnVie
+		if err := decoder.Decode(&retour); err != nil {
+			fmt.Println("Erreur décodage retour de commande pour reconnection", err)
+			continue
+		}
+		fmt.Println("Retour commande de reconnection du worker:", workerAddr, " ->")
+	}
+
+}
+
 func main() {
 	// Lecture de la config
 	var config Config
@@ -347,5 +384,6 @@ func main() {
 		//if err != nil {
 		//	fmt.Printf("Error receiving worker status: %v\n", err)
 		//}
+		go testRepriseContact(config.WorkersIP, WorkersDispos)
 	}
 }

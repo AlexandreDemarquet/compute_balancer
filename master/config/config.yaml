@@ -1,2 +1,2 @@
 workers_ip:
-  - localhost
+  - "localhost:8080"

@@ -13,8 +13,9 @@ A faire :
 - décomposition d'un fichier lidar au niveau d'un worker si fichier trop gros
 - gérer l'historique des commandes
 - gérer l'avancement du calcul
-- envoie commande worker
+- envoie commande worker OK
 - paralléliser avec des go routines la récupération des infos workers
-- rendre les chemins universels
+- rendre les chemins universels OK
 - faire une belle interface html
 - modifier architecture projet OK   ( ou mettre les binaires? /usr/local/bin? ou dans la ./master/bin?)
+- Faire des logs à la place des print
