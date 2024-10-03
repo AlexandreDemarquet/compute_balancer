@@ -19,3 +19,4 @@ A faire :
 - faire une belle interface html
 - modifier architecture projet OK   ( ou mettre les binaires? /usr/local/bin? ou dans la ./master/bin?)
 - Faire des logs à la place des print
+- resoudre bug ymal worker OK

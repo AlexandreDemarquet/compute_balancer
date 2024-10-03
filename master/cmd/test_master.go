@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -14,22 +16,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Configuration structure
+var logFile *os.File
+var configWorkersIP []string
+
 type Config struct {
 	WorkersIP []string `yaml:"workers_ip"`
-}
-
-// Log commands to file
-func logCommand(command string) {
-	f, err := os.OpenFile("commands.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println("Error logging command:", err)
-		return
-	}
-	defer f.Close()
-	if _, err := f.WriteString(fmt.Sprintf("%s: %s\n", time.Now().Format(time.RFC3339), command)); err != nil {
-		fmt.Println("Error writing to log file:", err)
-	}
 }
 
 type Command struct {
@@ -58,13 +49,42 @@ var (
 )
 
 func init() {
+	// Ouvre le fichier de log dès l'initialisation
+	var err error
+	logFile, err = os.OpenFile("/var/log/masterc_cb.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("Erreur lors de l'ouverture du fichier de log : %v", err)
+	}
+
+	// Redirige les logs à la fois vers le fichier et la sortie standard
+	mw := io.MultiWriter(os.Stdout, logFile)
+	log.SetOutput(mw)
+
 	// Initialisation de la variable globale MASTER_HOME
 	masterHome = os.Getenv("MASTER_HOME")
 	if masterHome == "" {
-		fmt.Println("MASTER_HOME non défini!!")
+		log.Fatalf("MASTER_HOME non défini!!")
 	} else {
-		fmt.Println("MASTER_HOME défini :", masterHome)
+		log.Println("MASTER_HOME défini :", masterHome)
 	}
+
+	// Lecture de la config
+	config := getConfig()
+	configWorkersIP = config.WorkersIP
+}
+
+func getConfig() Config {
+	var config Config
+	yamlFile, err := os.ReadFile(masterHome + "/config/config.yaml")
+	if err != nil {
+		log.Println("Erreur dans la lecture du .yaml:", err)
+	}
+
+	err = yaml.Unmarshal(yamlFile, &config)
+	if err != nil {
+		log.Println("Erreur dans le décodage du .yaml:", err)
+	}
+	return config
 }
 
 func sendCommandToWorker(workerAddr string, cmd Command) error {
@@ -148,9 +168,8 @@ func firstConnectionToWorker(workersAddr []string, IPdispos []string) []string {
 	for i := 0; i < len(workersAddr); i++ {
 		workerAddr := workersAddr[i]
 		conn, err := net.Dial("tcp", workerAddr)
-		fmt.Println(workerAddr)
 		if err != nil {
-			fmt.Println("Connection impossible au worker: ", workerAddr)
+			log.Println("Connection impossible au worker: ", workerAddr)
 			continue
 		}
 		defer conn.Close()
@@ -162,18 +181,18 @@ func firstConnectionToWorker(workersAddr []string, IPdispos []string) []string {
 
 		encoder := json.NewEncoder(conn)
 		if err := encoder.Encode(cmd_first_connection); err != nil {
-			fmt.Println("Envoie commande de première connection impossible au worker: ", workerAddr, "avec erreur: ", err)
+			log.Println("Envoie commande de première connection impossible au worker: ", workerAddr, "avec erreur: ", err)
 			continue
 		}
 
 		decoder := json.NewDecoder(conn)
 		var info WorkerInfo
 		if err := decoder.Decode(&info); err != nil {
-			fmt.Println("error decoding worker status:", err)
+			log.Println("error decoding worker status:", err)
 			continue
 		}
 		IPdispos = append(IPdispos, workerAddr)
-		fmt.Println("Worker disponible:", info.Address)
+		log.Println("Worker disponible:", info.Address)
 		updateWorkerInfo(workerAddr, info)
 	}
 
@@ -186,7 +205,7 @@ func handleClientConnection(conn net.Conn, workerAddr string) {
 	reader := bufio.NewReader(conn)
 	arg, err := reader.ReadString('\n')
 	if err != nil {
-		fmt.Println("Error reading argument:", err)
+		log.Println("Error reading argument:", err)
 		return
 	}
 	arg = arg[:len(arg)-1]
@@ -198,9 +217,9 @@ func handleClientConnection(conn net.Conn, workerAddr string) {
 
 	err = sendCommandToWorker(workerAddr, cmd)
 	if err != nil {
-		fmt.Println("Error sending command to worker:", err)
+		log.Println("Error sending command to worker:", err)
 	} else {
-		fmt.Println("Command sent to worker with argument:", arg)
+		log.Println("Command sent to worker with argument:", arg)
 	}
 }
 
@@ -212,18 +231,17 @@ func envoiCommandePython(workerAddr string, arg string) {
 	}
 	err := sendCommandToWorker(workerAddr, cmd)
 	if err != nil {
-		fmt.Println("erreur envoie commande au worker ", workerAddr, ": ", err)
+		log.Println("Erreur envoie commande au worker ", workerAddr, ": ", err)
 	} else {
-		fmt.Println("Commande envoyée avec l'argument:", arg)
+		log.Println("Commande envoyée avec l'argument:", arg)
 	}
 }
 
 func updateWorkerInfo(workerAddr string, info WorkerInfo) {
 	mutex.Lock()
 	defer mutex.Unlock()
-
 	workersInfo[workerAddr] = &info
-	fmt.Printf("Worker info updated: %+v\n", info)
+	log.Printf("Worker info updated: %+v\n", info)
 }
 
 func receiveWorkerStatus(workerAddr string) error {
@@ -258,7 +276,7 @@ func startHTTPServer() {
 	// Endpoint to get worker information
 	http.HandleFunc("/workers", workerInfoHandler)
 
-	fmt.Println("HTTP server running on :8082")
+	log.Println("HTTP server running on :8082")
 	http.ListenAndServe(":8082", nil)
 }
 
@@ -280,7 +298,7 @@ func testRepriseContact(config_ip []string, worker_actuel []string) {
 		workerAddr := missing[i]
 		conn, err := net.Dial("tcp", workerAddr)
 		if err != nil {
-			fmt.Println("Tentative de reconnection impossible au worker: ", workerAddr)
+			log.Println("Tentative de reconnection impossible au worker: ", workerAddr)
 			continue
 		}
 		defer conn.Close()
@@ -292,64 +310,42 @@ func testRepriseContact(config_ip []string, worker_actuel []string) {
 
 		encoder := json.NewEncoder(conn)
 		if err := encoder.Encode(cmd_first_connection); err != nil {
-			fmt.Println("Envoie commande de reconnection impossible au worker: ", workerAddr, "avec erreur: ", err)
+			log.Println("Envoie commande de reconnection impossible au worker: ", workerAddr, "avec erreur: ", err)
 			continue
 		}
 
 		decoder := json.NewDecoder(conn)
 		var retour WorkerEnVie
 		if err := decoder.Decode(&retour); err != nil {
-			fmt.Println("Erreur décodage retour de commande pour reconnection", err)
+			log.Println("Erreur décodage retour de commande pour reconnection", err)
 			continue
 		}
-		fmt.Println("Retour commande de reconnection du worker:", workerAddr, " ->")
+		log.Println("Retour commande de reconnection du worker:", workerAddr, " ->")
 	}
 
 }
 
 func main() {
-	// Lecture de la config
-	var config Config
-	yamlFile, err := os.ReadFile(masterHome + "/config/config.yaml")
-	if err != nil {
-		fmt.Println("Erreur dans la lecture du .yaml:", err)
-	}
-
-	err = yaml.Unmarshal(yamlFile, &config)
-	if err != nil {
-		fmt.Println("Erreur dans le décodage du .yaml:", err)
-	}
+	defer logFile.Close() // on s'ssaure que le fichier de log se ferme bien à la fin du prog
 
 	var WorkersDispos []string
 	// pour chaque worker renseigné on essaye de se connecter à lui et de récupérer ses informations
-	WorkersDispos = firstConnectionToWorker(config.WorkersIP, WorkersDispos)
-
-	//listenAddr := ":8081"
-	//workerAddr := "localhost:8080"
-
-	// Écoute sur le port 8081 pour lui envoyer l'argument de la commande (ça sera le nom de fichier .las que le serveur web lui enverra)
-	//ln, err := net.Listen("tcp", listenAddr)
-	//if err != nil {
-	//	fmt.Println("Error starting TCP server on port 8081:", err)
-	//	os.Exit(1)
-	//}
-	//defer ln.Close()
+	WorkersDispos = firstConnectionToWorker(configWorkersIP, WorkersDispos)
+	log.Println("Worker dispo :", configWorkersIP)
 
 	go startHTTPServer() // Démarrer le serveur HTTP dans une goroutine
-
-	//fmt.Println("Master listening on", listenAddr)
 
 	dossier := masterHome + "/data"
 	fichiersPrecedents, err := lireFichiers(dossier)
 	if err != nil {
-		fmt.Println("Erreur de lecture du dossier:", err)
+		log.Println("Erreur de lecture du dossier:", err)
 	}
 	for {
 		WorkersDispos = recupInfosWorkers(WorkersDispos)
 
 		fichiersActuels, err := lireFichiers(dossier)
 		if err != nil {
-			fmt.Println("Erreur de lecture du dossier:", err)
+			log.Println("Erreur de lecture du dossier:", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
@@ -357,9 +353,9 @@ func main() {
 		// Chercher les nouveaux fichiers en comparant avec les précédents
 		for fichier := range fichiersActuels {
 			if _, existaitDeja := fichiersPrecedents[fichier]; !existaitDeja {
-				fmt.Printf("Nouveau fichier détecté: %s\n", fichier)
+				log.Printf("Nouveau fichier détecté: %s\n", fichier)
 				// ICI faut faire le choix du worker auquel on envoie les boulot.......
-				fmt.Println("Worker choisi pour le boulot: ", "localhost pour le test")
+				log.Println("Worker choisi pour le boulot: ", "localhost pour le test")
 				go envoiCommandePython("localhost:8080", fichier) // utilisation d'un go routine pour envoyer la commande python
 			}
 		}
@@ -370,20 +366,6 @@ func main() {
 		// Pause avant la prochaine vérification (ex : 2 secondes)
 		time.Sleep(2 * time.Second)
 
-		//conn, err := ln.Accept()
-		//if err != nil {
-		//	fmt.Println("Error accepting connection:", err)
-		//	continue
-		//}
-
-		// Gérer la connexion client dans une goroutine séparée
-		//go handleClientConnection(conn, workerAddr)
-
-		// Après avoir traité la commande, récupérer l'état du worker
-		//err = receiveWorkerStatus(workerAddr)
-		//if err != nil {
-		//	fmt.Printf("Error receiving worker status: %v\n", err)
-		//}
-		go testRepriseContact(config.WorkersIP, WorkersDispos)
+		go testRepriseContact(configWorkersIP, WorkersDispos)
 	}
 }

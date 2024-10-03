@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -40,19 +41,19 @@ func reportStatus(conn net.Conn) {
 	// Récupération de l'utilisation CPU et mémoire
 	cpuUsage, err := informationmachine.GetCPUUsage()
 	if err != nil {
-		fmt.Println("Erreur lors de la récupération de l'utilisation CPU:", err)
+		log.Println("Erreur lors de la récupération de l'utilisation CPU:", err)
 		return
 	}
 
 	//memoryUsage := getMemoryUsage()
 	memoryUsage, err := informationmachine.GetRAMUsage()
 	if err != nil {
-		fmt.Println("Erreur lors de la récupération de l'utilisation RAM:", err)
+		log.Println("Erreur lors de la récupération de l'utilisation RAM:", err)
 		return
 	}
 	nomMachine, err := os.Hostname()
 	if err != nil {
-		fmt.Println("Erreur lors de la récupération le nom de la machine:", err)
+		log.Println("Erreur lors de la récupération le nom de la machine:", err)
 		return
 	}
 
@@ -70,7 +71,7 @@ func reportStatus(conn net.Conn) {
 	// Envoi de l'état au client
 	encoder := json.NewEncoder(conn)
 	if err := encoder.Encode(workerStatus); err != nil {
-		fmt.Println("Erreur lors de l'envoi de l'état du worker:", err)
+		log.Println("Erreur lors de l'envoi de l'état du worker:", err)
 	}
 }
 
@@ -123,7 +124,7 @@ func handleVivantOuPas(conn net.Conn) {
 	// Envoi de l'état au client
 	encoder := json.NewEncoder(conn)
 	if err := encoder.Encode(workerAlive); err != nil {
-		fmt.Println("Erreur lors de l'envoi de l'état du worker pour tentative de reconnection:", err)
+		log.Println("Erreur lors de l'envoi de l'état du worker pour tentative de reconnection:", err)
 	}
 }
 
