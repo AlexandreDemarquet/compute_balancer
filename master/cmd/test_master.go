@@ -13,7 +13,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xitongsys/parquet-go/writer"
 	"gopkg.in/yaml.v3"
+
+	//"github.com/xitongsys/parquet-go/reader"
+	"github.com/xitongsys/parquet-go-source/local"
 )
 
 var logFile *os.File
@@ -26,6 +30,15 @@ type Config struct {
 type Command struct {
 	Command string   `json:"command"`
 	Args    []string `json:"args"`
+}
+
+type CommandHistory struct {
+	WorkerAddr   string   `parquet:"name=worker_addr, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	Command      string   `parquet:"name=command, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	Args         []string `parquet:"name=args, type=BYTE_ARRAY, repeated"`
+	Timestamp    int64    `parquet:"name=timestamp, type=INT64"`
+	Status       string   `parquet:"name=status, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	ErrorMessage string   `parquet:"name=error_message, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 }
 
 type WorkerInfo struct {
@@ -87,15 +100,48 @@ func getConfig() Config {
 	return config
 }
 
+func logCommandToParquet(workerAddr string, cmd Command, status, errorMsg string) error {
+	filename := fmt.Sprintf("command_history_%s.parquet", time.Now().Format("2006-01-02"))
+
+	f, err := local.NewLocalFileWriter(masterHome + "/history/" + filename)
+	if err != nil {
+		return fmt.Errorf("failed to open Parquet file: %v", err)
+	}
+	defer f.Close()
+
+	pw, err := writer.NewParquetWriter(f, new(CommandHistory), 4)
+	if err != nil {
+		return fmt.Errorf("failed to create Parquet writer: %v", err)
+	}
+	defer pw.WriteStop()
+
+	history := CommandHistory{
+		WorkerAddr:   workerAddr,
+		Command:      cmd.Command,
+		Args:         cmd.Args,
+		Timestamp:    time.Now().Unix(),
+		Status:       status,
+		ErrorMessage: errorMsg,
+	}
+
+	if err := pw.Write(history); err != nil {
+		return fmt.Errorf("failed to write to Parquet: %v", err)
+	}
+
+	return nil
+}
+
 func sendCommandToWorker(workerAddr string, cmd Command) error {
 	conn, err := net.Dial("tcp", workerAddr)
 	if err != nil {
+		logCommandToParquet(workerAddr, cmd, "failed", err.Error()) // Log en cas d'erreur de connexion
 		return fmt.Errorf("erreur de connection au worker pour envoie commande: %v", err)
 	}
 	defer conn.Close()
 
 	encoder := json.NewEncoder(conn)
 	if err := encoder.Encode(cmd); err != nil {
+		logCommandToParquet(workerAddr, cmd, "failed", err.Error()) // Log en cas d'échec d'envoi
 		return err
 	}
 
@@ -104,9 +150,11 @@ func sendCommandToWorker(workerAddr string, cmd Command) error {
 	for {
 		status, err := reader.ReadString('\n')
 		if err != nil {
-			break // Sortir de la boucle si la connexion est fermée
+			logCommandToParquet(workerAddr, cmd, "failed", err.Error()) // Log en cas d'échec de lecture
+			break                                                       // Sortir de la boucle si la connexion est fermée
 		}
 		fmt.Println("Worker Status:", status)
+		logCommandToParquet(workerAddr, cmd, "success", "") // Log de la réussite
 	}
 	return nil
 }
@@ -163,7 +211,8 @@ func recupInfosWorkers(workersAddr []string) []string {
 	return nouvIpDispos
 }
 
-func firstConnectionToWorker(workersAddr []string, IPdispos []string) []string {
+func firstConnectionToWorker(workersAddr []string) []string {
+	var IPdispos []string
 	// On boucle sur les adresses ip présentent dans le yaml et on renvoie les adresses ip des workers disponibles.
 	for i := 0; i < len(workersAddr); i++ {
 		workerAddr := workersAddr[i]
@@ -195,32 +244,7 @@ func firstConnectionToWorker(workersAddr []string, IPdispos []string) []string {
 		log.Println("Worker disponible:", info.Address)
 		updateWorkerInfo(workerAddr, info)
 	}
-
 	return IPdispos
-}
-
-func handleClientConnection(conn net.Conn, workerAddr string) {
-	defer conn.Close()
-
-	reader := bufio.NewReader(conn)
-	arg, err := reader.ReadString('\n')
-	if err != nil {
-		log.Println("Error reading argument:", err)
-		return
-	}
-	arg = arg[:len(arg)-1]
-
-	cmd := Command{
-		Command: "run_python",
-		Args:    []string{arg},
-	}
-
-	err = sendCommandToWorker(workerAddr, cmd)
-	if err != nil {
-		log.Println("Error sending command to worker:", err)
-	} else {
-		log.Println("Command sent to worker with argument:", arg)
-	}
 }
 
 // function qui envoie une commande python à workerAddr (ip:port) avec l'argument arg
@@ -232,8 +256,10 @@ func envoiCommandePython(workerAddr string, arg string) {
 	err := sendCommandToWorker(workerAddr, cmd)
 	if err != nil {
 		log.Println("Erreur envoie commande au worker ", workerAddr, ": ", err)
+		logCommandToParquet(workerAddr, cmd, "failed", err.Error()) // Log en cas d'échec
 	} else {
 		log.Println("Commande envoyée avec l'argument:", arg)
+		logCommandToParquet(workerAddr, cmd, "success", "") // Log de la réussite
 	}
 }
 
@@ -242,23 +268,6 @@ func updateWorkerInfo(workerAddr string, info WorkerInfo) {
 	defer mutex.Unlock()
 	workersInfo[workerAddr] = &info
 	log.Printf("Worker info updated: %+v\n", info)
-}
-
-func receiveWorkerStatus(workerAddr string) error {
-	conn, err := net.Dial("tcp", workerAddr)
-	if err != nil {
-		return fmt.Errorf("error connecting to worker: %v", err)
-	}
-	defer conn.Close()
-
-	decoder := json.NewDecoder(conn)
-	var info WorkerInfo
-	if err := decoder.Decode(&info); err != nil {
-		return fmt.Errorf("error decoding worker status: %v", err)
-	}
-
-	updateWorkerInfo(workerAddr, info)
-	return nil
 }
 
 func workerInfoHandler(w http.ResponseWriter, r *http.Request) {
@@ -293,7 +302,7 @@ func lireFichiers(dossier string) (map[string]os.FileInfo, error) {
 }
 
 func testRepriseContact(config_ip []string, worker_actuel []string) {
-	missing := findMissing(config_ip, worker_actuel)
+	missing := findMissing(config_ip, worker_actuel) // si l'on perd des workers on rentre dans la boucle
 	for i := 0; i < len(missing); i++ {
 		workerAddr := missing[i]
 		conn, err := net.Dial("tcp", workerAddr)
@@ -328,9 +337,8 @@ func testRepriseContact(config_ip []string, worker_actuel []string) {
 func main() {
 	defer logFile.Close() // on s'ssaure que le fichier de log se ferme bien à la fin du prog
 
-	var WorkersDispos []string
 	// pour chaque worker renseigné on essaye de se connecter à lui et de récupérer ses informations
-	WorkersDispos = firstConnectionToWorker(configWorkersIP, WorkersDispos)
+	WorkersDispos := firstConnectionToWorker(configWorkersIP)
 	log.Println("Worker dispo :", configWorkersIP)
 
 	go startHTTPServer() // Démarrer le serveur HTTP dans une goroutine

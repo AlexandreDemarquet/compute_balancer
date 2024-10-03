@@ -1,0 +1,4 @@
+pour install parquet : 
+go get github.com/xitongsys/parquet-go-source/local
+go get github.com/xitongsys/parquet-go/reader
+go get github.com/xitongsys/parquet-go/writer

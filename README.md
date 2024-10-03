@@ -18,5 +18,6 @@ A faire :
 - rendre les chemins universels OK
 - faire une belle interface html
 - modifier architecture projet OK   ( ou mettre les binaires? /usr/local/bin? ou dans la ./master/bin?)
-- Faire des logs à la place des print
+- Faire des logs à la place des print OK
 - resoudre bug ymal worker OK
+- factoriser code master
